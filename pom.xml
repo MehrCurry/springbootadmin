@@ -14,7 +14,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>1.4.4.RELEASE</version>
+		<version>1.5.10.RELEASE</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 
@@ -22,8 +22,8 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>1.8</java.version>
-        <kotlin.version>1.0.6</kotlin.version>
-		<spring-boot-admin.version>1.4.5</spring-boot-admin.version>
+        <kotlin.version>1.2.30</kotlin.version>
+		<spring-boot-admin.version>1.5.7</spring-boot-admin.version>
         <server.port>8188</server.port>
         <docker.image.group>gzo</docker.image.group>
         <spock.version>1.0-groovy-2.4</spock.version>
@@ -33,7 +33,7 @@
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
-                <version>Camden.SR5</version>
+                <version>Edgware.SR2</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
