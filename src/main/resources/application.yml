@@ -1,8 +1,20 @@
 server:
-    port: @server.port@
+  port: @server.port@
 spring:
-    boot:
-        admin:
-            url: http://localhost:@server.port@
-            discovery:
-              enabled: false
+  boot:
+    admin:
+      url: http://localhost:@server.port@
+      discovery:
+        enabled: false
+    routes:
+      endpoints: env,metrics,dump,jolokia,info,configprops,trace,logfile,refresh,flyway,liquibase,heapdump,loggers,auditevents,hystrix.stream
+    turbine:
+      clusters: default
+      location: turbine
+eureka:
+  client:
+    enabled: false
+
+management:
+  security:
+    enabled: false

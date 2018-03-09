@@ -1,0 +1,12 @@
+= Spring Boot Admin
+
+This is my sample SBA Server.
+
+It is configured to register itself and has Eureka client support
+compiled in but turned off by default.
+
+[source,yaml]
+.application.yml
+----
+include::src/main/resources/application.yml[]
+----
