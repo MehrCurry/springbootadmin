@@ -1,0 +1,138 @@
+pipeline {
+
+    agent any
+
+    tools {
+        maven 'Maven 3.5.0'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
+    parameters {
+        string(defaultValue: 'src/main/config/environment/${PROJECT_NAME}/iteraria-pizza-service.properties', description: 'path to the environment configuration file of the stage', name: 'propertiesFile')
+        string(defaultValue: "springbootadmin", description: 'name of the application', name: 'appName')
+    }
+
+    stages {
+
+        stage('Environment Configuration') {
+            when {
+                expression {
+                    return scm.branches[0].name == "master"
+                }
+            }
+            steps {
+                script {
+                    try {
+                        sh "oc delete configmap ${appName}.properties"
+                    }
+                    catch (exc) {
+                        // initial creation of a configmap
+                    }
+                    sh "oc create configmap ${appName}.properties --from-file=${params.propertiesFile}"
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                    withCredentials([string(credentialsId: 'maven-deployment-token', variable: 'MAVEN_DEPLOYMENT_TOKEN')]) {
+                        sh "mvn -s $MAVEN_SETTINGS clean test"
+                    }
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                    withCredentials([string(credentialsId: 'maven-deployment-token', variable: 'MAVEN_DEPLOYMENT_TOKEN')]) {
+                        sh "mvn -s $MAVEN_SETTINGS install -Dmaven.test.skip=true"
+                    }
+                }
+            }
+        }
+
+        stage('Analysis') {
+            steps {
+                configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                    script {
+                        withCredentials([string(credentialsId: 'maven-deployment-token', variable: 'MAVEN_DEPLOYMENT_TOKEN')]) {
+                            openshift.withProject('${PROJECT_NAME}') {
+                                def secret = openshift.selector('secret/sonarqube-analyst-secret').object()
+                                def sonarAnalystToken = new String(secret.get("data").get("analyst-token").decodeBase64())
+                                sh "mvn -s $MAVEN_SETTINGS dependency:tree -DoutputFile=dependency-tree.txt -Dsort=true"
+                                sh "echo Dependency list: && cat dependency-tree.txt | grep ^[\\+\\\\]- | sed -e 's/^[\\+\\\\]- /    /' | sort"
+
+                                def branchName = env.BRANCH_NAME != null ? env.BRANCH_NAME : 'master'
+
+                                sh "mvn -s $MAVEN_SETTINGS sonar:sonar -Dsonar.branch=${branchName} -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=${sonarAnalystToken} -DskipTests=true"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Migrate Database') {
+            when {
+                expression {
+                    return scm.branches[0].name == "master"
+                }
+            }
+            steps {
+                configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                    script {
+                        openshift.withProject('${PROJECT_NAME}') {
+                            def secret = openshift.selector('secret/${appName}-postgres').object()
+                            def username = new String(secret.get("data").get("database-user").decodeBase64())
+                            def password = new String(secret.get("data").get("database-password").decodeBase64())
+                            def database = new String(secret.get("data").get("database-name").decodeBase64())
+                            def service = "${appName}-postgres"
+
+                            withEnv(["OPENSHIFT_DB_USER=${username}",
+                                     "OPENSHIFT_DB_PASSWORD=${password}",
+                                     "OPENSHIFT_DB_DATABASE=${database}",
+                                     "OPENSHIFT_DB_SERVICE=${service}"]) {
+                                withCredentials([string(credentialsId: 'maven-deployment-token', variable: 'MAVEN_DEPLOYMENT_TOKEN')]) {
+                                    sh "mvn -s $MAVEN_SETTINGS flyway:clean"
+                                    sh "mvn -s $MAVEN_SETTINGS flyway:migrate"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Nexus') {
+            steps {
+                configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                    withCredentials([string(credentialsId: 'maven-deployment-token', variable: 'MAVEN_DEPLOYMENT_TOKEN')]) {
+                        sh "mvn -s $MAVEN_SETTINGS deploy -DdeployOnly"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to OpenShift') {
+            when {
+                expression {
+                    return scm.branches[0].name == "master"
+                }
+            }
+            steps {
+                sh "oc start-build '${appName}' --from-dir=./"
+                openshiftVerifyDeployment depCfg: '${appName}', waitTime: '10', waitUnit: 'min'
+            }
+        }
+    }
+}

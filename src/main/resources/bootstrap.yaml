@@ -4,4 +4,5 @@ spring:
   cloud:
     config:
       discovery:
-        enabled: true
+        enabled: false
+      fail-fast: true

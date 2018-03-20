@@ -23,4 +23,5 @@ dist/
 nbdist/
 .nb-gradle/
 
-application.yaml
+/application.yaml
+/bootstrap.yaml
